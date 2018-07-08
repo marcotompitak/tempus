@@ -15,6 +15,7 @@ class Networker(object):
     def __init__(self):
 
         self.peers = {}
+        self.reverse_peers = {}
         self.port = 0
         self.ready = False
         self.stage = "ping"  # Stages are ping->tick->vote->select
@@ -41,6 +42,7 @@ class Networker(object):
             return False
 
         self.peers[netloc] = peer_addr
+        self.reverse_peers[peer_addr] = netloc
         return True
 
     def forward(self, data_dict, route, origin=None, redistribute=0):

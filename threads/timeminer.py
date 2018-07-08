@@ -167,7 +167,16 @@ class Timeminer(object):
                 second_sleep = cycle_time - (end-start) - overshoot
                 second_sleep = 0 if second_sleep < 0 else second_sleep
 
-                time.sleep(second_sleep)  # 2nd sleep
+                time.sleep(second_sleep)  # 2nd
+
+                logger.debug("Number of ticks: " + str(self.clockchain.tick_pool_size()))
+                logger.debug("Number of forks: " + str(self.clockchain.fork_pool_size()))
+
+                if self.clockchain.fork_pool_size() > self.clockchain.tick_pool_size():
+                    logger.debug("Aborting cycle, need to resync------------------")
+                    synced = self.clockchain.resync()
+                    if not synced:
+                        logger.debug("Sync failed, fingers crossed for next round")
 
                 logger.debug("Vote stage--------------------------------------")
                 start = time.time()

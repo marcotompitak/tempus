@@ -71,11 +71,16 @@ class API(object):
             if self.check_duplicate(tick):
                 return "duplicate request please wait 10s", 400
 
-            if not validate_tick(tick, self.clockchain.latest_selected_tick(),
-                                 self.clockchain.possible_previous_ticks()):
-                return "Invalid tick", 400
+            tick_is_valid, reason_is_resync_trigger = validate_tick(tick, self.clockchain.latest_selected_tick(),
+                                 self.clockchain.possible_previous_ticks())
 
-            self.clockchain.add_to_tick_pool(tick)
+            if tick_is_valid:
+                self.clockchain.add_to_tick_pool(tick)
+            else:
+                if reason_is_resync_trigger:
+                    origin = request.args.get('addr')
+                    self.clockchain.fork_pool.update({origin: tick})
+                return "Invalid tick", 400
 
             # TODO: Sanitize this input..
             redistribute = int(request.args.get('redistribute'))

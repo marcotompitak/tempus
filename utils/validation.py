@@ -98,27 +98,27 @@ def validate_tick(tick, previous_tick=None, possible_previous_ticks=None,
 
     if not validate_schema(tick_copy, 'tick_schema.json'):
         logger.debug("Tick failed schema validation")
-        return False
+        return False, False
 
     # Check hash and sig keeping in mind signature might be popped off
     if not validate_sig_hash(tick_copy):
         logger.debug("Tick failed signature and hash checking")
-        return False
+        return False, True
 
     if previous_tick is not None:
         if tick_copy['height'] != prev_tick_copy['height'] + 1:
             logger.debug("Tick failed height check")
-            return False
+            return False, True
 
     if possible_previous_ticks is not None:
         if not tick_copy['prev_tick'] in possible_previous_ticks:
             logger.debug("Tick failed referencing any 1 of prev possible ticks")
-            return False
+            return False, True
 
     # TODO: This forces lower bound, but should also include upper bound?
     if not validate_tick_timediff(prev_tick_copy):  # Verbose: fails often
         logger.debug("Tick failed minimum timediff check") if verbose else None
-        return False
+        return False, False
 
     # Check all pings in list
     for ping in tick_copy['list']:
@@ -127,9 +127,9 @@ def validate_tick(tick, previous_tick=None, possible_previous_ticks=None,
         valid_ping = validate_ping(ping)
         if not valid_ping:
             logger.debug("tick invalid due to containing invalid ping")
-            return False
+            return False, False
 
-    return True
+    return True, False
 
 
 def validate_ping(ping, ping_pool=None, vote=False):
@@ -160,4 +160,8 @@ def validate_ping(ping, ping_pool=None, vote=False):
         logger.debug(stage + " failed sanity check on timestamp")
         return False
 
+    return True
+
+# TODO: Implement validation for an entire chain
+def validate_clockchain(chain):
     return True
