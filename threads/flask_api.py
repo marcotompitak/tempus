@@ -3,7 +3,7 @@ from flask import jsonify, request, Flask
 from utils.pki import pubkey_to_addr, verify
 from utils.helpers import remap, resolve, standard_encode, hasher, attempt
 from utils.common import logger, config, credentials
-from utils.validation import validate_tick, validate_ping, validate_schema
+from utils.validation import validate_tick, validate_tick_for_resync, validate_ping, validate_schema
 from expiringdict import ExpiringDict
 
 
@@ -71,13 +71,14 @@ class API(object):
             if self.check_duplicate(tick):
                 return "duplicate request please wait 10s", 400
 
-            tick_is_valid, reason_is_resync_trigger = validate_tick(tick, self.clockchain.latest_selected_tick(),
-                                 self.clockchain.possible_previous_ticks())
+            tick_is_valid = validate_tick(tick, self.clockchain.latest_selected_tick(),
+                                          self.clockchain.possible_previous_ticks())
 
             if tick_is_valid:
                 self.clockchain.add_to_tick_pool(tick)
             else:
-                if reason_is_resync_trigger:
+                if not validate_tick_for_resync(tick, self.clockchain.latest_selected_tick(),
+                                                self.clockchain.possible_previous_ticks()):
                     origin = request.args.get('addr')
                     self.clockchain.fork_pool.update({origin: tick})
                 return "Invalid tick", 400
