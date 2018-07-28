@@ -32,7 +32,7 @@ class API(object):
 
         route = 'vote' if vote else 'ping'
 
-        if not validate_ping(ping, self.clockchain.ping_pool, vote):
+        if not validate_ping(ping, self.clockchain.ping_pool, vote, not (vote and not self.clockchain.synced)):
             return "Invalid " + route, 400
 
         if vote:
@@ -63,8 +63,8 @@ class API(object):
         # TODO: Only accept ticks/pings from peers?
         @app.route('/forward/tick', methods=['POST'])
         def forward_tick():
-            if self.networker.stage == "select":
-                return "not accepting further ticks", 400
+            # if self.networker.stage == "select":
+            #     return "not accepting further ticks", 400
 
             tick = request.get_json()
 

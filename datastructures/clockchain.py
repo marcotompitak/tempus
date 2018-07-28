@@ -17,6 +17,9 @@ class Clockchain(object):
         # Priority queue because we want to sort by cumulative continuity
         self.tick_pool = PriorityQueue()
 
+        # TODO Move to timeminer
+        self.synced = True
+
         self.networker = networker
 
         logger.debug("This node is " + credentials.addr)
@@ -73,6 +76,7 @@ class Clockchain(object):
         logger.debug("Returning " + str(alt_chain_is_valid))
         return alt_chain_is_valid
 
+    #TODO Move this to timeminer, doesn't need to be a clockchain method
     def resync(self):
         alt_prev_ticks = list(set(tick['prev_tick'] for tick in self.fork_pool.values()))
         logger.debug("Resyncing, alternative references found to ticks:")
@@ -82,7 +86,7 @@ class Clockchain(object):
         if len(alt_prev_ticks) > 1:
             logger.debug("More than one alternative reference found, calculating majority")
             ref_counts = [(prev_tick, alt_prev_ticks.count(prev_tick)) for prev_tick in alt_prev_ticks]
-            majority_prev_tick = sorted(ref_counts, key=lambda tup: tup[1], reverse=True)
+            majority_prev_tick = sorted(ref_counts, key=lambda tup: tup[1], reverse=True)[0][0]
             logger.debug("Majority reference: " + str(majority_prev_tick))
         elif len(alt_prev_ticks) == 1:
             majority_prev_tick = alt_prev_ticks[0]
@@ -254,6 +258,7 @@ class Clockchain(object):
 
     # Returns one of the tick possibilities (at random?)
     def latest_selected_tick(self):
+
         # TODO: Return the one with highest amount of pings?
         tick = None
         while tick is None:
@@ -265,20 +270,58 @@ class Clockchain(object):
 
         return tick
 
+    def purge_by(self, candidates, func):
+        max_val = func(
+            max(
+                candidates,
+                key=func
+            )
+        )
+        return [
+            candidate
+            for candidate in candidates
+            if func(candidate) == max_val
+        ]
+
+    def num_pings(self, tick):
+        return len(tick['list'])
+
+    def hash_diff(self, tick):
+        pkhash = hasher({'0': tick['pubkey']})
+        pthash = hasher({'0': tick['prev_tick']})
+        diff = abs(int(pkhash + pthash, 16) - int(pthash, 16))
+        return diff
+
+    def select(self):
+        candidates = [x[2] for x in list(self.tick_pool.queue)]
+
+        if len(candidates) > 1:
+            candidates = self.purge_by(candidates, self.num_pings)
+
+        if len(candidates) > 1:
+            candidates = self.purge_by(candidates, self.hash_diff)
+
+        if self.chain.full():
+            # This removes earliest item from queue
+            self.chain.get()
+        self.chain.put(self.json_tick_to_chain_tick(candidates[0]))
+
+        self.restart_cycle()
+
+
     def select_highest_voted_to_chain(self):
         # ---- Add all ticks with same amount of votes to the dictionary ----
         # WARNING: This MUST happen less than 50% of the time and result in
         # usually only 1 winner, so that chain only branches occasionally
         # and thus doesn't become an exponentially growing tree.
         # This is the main condition to achieve network-wide consensus
-        top_tick_refs = self.top_tick_refs()
 
-        highest_ticks = self.get_ticks_by_ref(top_tick_refs)
+        highest_ticks = list(self.tick_pool.queue)
 
         # TODO: Should always be > 0 but sometimes not, when unsynced...
         if len(highest_ticks) > 0:
             logger.debug("Top tick refs with " + str(len(highest_ticks[0]['list']))
-                         + " pings each:" + str(top_tick_refs))
+                         + " pings each")
 
             tick_dict = {}
             for tick in highest_ticks:

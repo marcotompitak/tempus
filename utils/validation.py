@@ -44,6 +44,7 @@ def validate_tick_timediff(tick):
     utc_now = utcnow()
     if not median + \
             config['cycle_time_multiplier']*config['cycle_time'] < utc_now:
+        logger.debug("Really failed timediff")
         return False
 
     return True
@@ -134,8 +135,13 @@ def validate_tick(tick, previous_tick=None, possible_previous_ticks=None,
         return False
 
     # TODO: This forces lower bound, but should also include upper bound?
-    if not validate_tick_timediff(prev_tick_copy):  # Verbose: fails often
-        logger.debug("Tick failed minimum timediff check") if verbose else None
+    if prev_tick_copy is not None:
+        if not validate_tick_timediff(prev_tick_copy):  # Verbose: fails often
+            logger.debug("Tick failed minimum timediff check") if verbose else None
+            return False
+
+    if not validate_tick_timediff(tick_copy):
+        logger.debug("Failed age check")
         return False
 
     # Check all pings in list
@@ -150,14 +156,14 @@ def validate_tick(tick, previous_tick=None, possible_previous_ticks=None,
     return True
 
 
-def validate_ping(ping, ping_pool=None, vote=False):
+def validate_ping(ping, ping_pool=None, vote=False, pin_vote_on_ping=True):
     stage = 'vote' if vote else 'ping'
     if not validate_schema(ping, 'ping_schema.json'):
         logger.debug(stage + " failed schema validation")
         return False
 
     if ping_pool is not None:
-        if vote:
+        if vote and pin_vote_on_ping:
             if pubkey_to_addr(ping['pubkey']) not in ping_pool:
                 logger.debug("Voters's pubkey not found in pingpool")
                 return False
@@ -180,6 +186,19 @@ def validate_ping(ping, ping_pool=None, vote=False):
 
     return True
 
+
 # TODO: Implement validation for an entire chain
 def validate_clockchain(chain):
+    chain_copy = copy.deepcopy(chain)
+    reference_tick = chain_copy.pop(0)
+    for i, tick in enumerate(chain_copy):
+        if not validate_tick(list(tick.values())[0], list(reference_tick.values())[0], verbose=True):
+            logger.debug("Tick " + str(i) + " failed to validate")
+            logger.debug("Heights: " +
+                         str(list(tick.values())[0]['height']) +
+                         ", " +
+                         str(list(reference_tick.values())[0]['height']))
+            logger.debug(str(tick))
+            return False
+        reference_tick = chain_copy[i]
     return True
