@@ -1,9 +1,8 @@
 from utils.validation import validate_ping, validate_tick
-from utils.helpers import utcnow, standard_encode, mine, median_ts
-from utils.common import logger, credentials, config
+from utils.helpers import utcnow, standard_encode, mine
+from utils.common import logger, credentials
 from utils.pki import sign
 import time
-import random
 import threading
 from utils.validation import validate_clockchain
 import requests
@@ -81,7 +80,7 @@ class Timeminer(object):
 
         logger.debug("Attempting to sync chain with majority peers")
         synced = False
-        time.sleep(5) # Give other nodes a chance to finish their select stage before requesting their chain
+        time.sleep(5)  # Give other nodes a chance to finish their select stage before requesting their chain
         while not synced and len(majority_peers) > 0:
             next_peer = majority_peers.pop()
             logger.debug("Syncing with peer " + str(next_peer))

@@ -2,7 +2,7 @@ import os
 import copy
 import ecdsa
 import jsonref
-from utils.pki import verify, pubkey_to_addr
+from utils.pki import verify
 from jsonschema import validate
 
 from utils.helpers import hasher, handle_exception, standard_encode, median_ts
@@ -111,8 +111,7 @@ def validate_tick_continuity(tick, prev_tick):
     return False
 
 
-def validate_tick_for_resync(tick, previous_tick=None, possible_previous_ticks=None,
-                  verbose=True):
+def validate_tick_for_resync(tick, previous_tick=None, possible_previous_ticks=None):
     # Doing validation on a copy so that the original keeps its "this_tick" ref
     # Otherwise the tick dict will be modified by any operations done here
     tick_copy = copy.deepcopy(tick)
@@ -155,8 +154,7 @@ def validate_tick(tick, previous_tick=None, possible_previous_ticks=None,
     # Popping it off as it is not supposed to be an actual part of a tick
     tick_copy.pop('this_tick', None)
 
-    if not validate_tick_for_resync(tick_copy, previous_tick, possible_previous_ticks,
-                                    verbose):
+    if not validate_tick_for_resync(tick_copy, previous_tick, possible_previous_ticks):
         return False
 
     if not validate_schema(tick_copy, 'tick_schema.json'):

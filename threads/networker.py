@@ -4,7 +4,7 @@ import random
 import requests
 
 from utils.pki import sign
-from threading import Timer, Thread
+from threading import Thread
 from urllib.parse import urlparse
 
 from utils.common import logger, config, credentials
