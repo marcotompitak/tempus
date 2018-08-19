@@ -44,7 +44,6 @@ def validate_tick_timediff(tick):
     utc_now = utcnow()
     if not median + \
             config['cycle_time_multiplier']*config['cycle_time'] < utc_now:
-        logger.debug("Really failed timediff")
         return False
 
     return True

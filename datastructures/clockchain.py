@@ -173,20 +173,29 @@ class Clockchain(object):
         return diff
 
     def select(self):
+        logger.debug("Selecting the most valid tick...")
         if self.tick_pool_size() == 0:
             return
 
         candidates = [x[2] for x in list(self.tick_pool.queue)]
 
+        logger.debug("Number of candidates: " + str(len(candidates)))
+
+        # TODO: purge by continuity
         if len(candidates) > 1:
+            logger.debug("Purging on number of pings")
             candidates = self.purge_by(candidates, self.num_pings)
+            logger.debug("Number of candidates: " + str(len(candidates)))
 
         if len(candidates) > 1:
+            logger.debug("Purging on hash diff")
             candidates = self.purge_by(candidates, self.hash_diff)
+            logger.debug("Number of candidates: " + str(len(candidates)))
 
         if self.chain.full():
             # This removes earliest item from queue
             self.chain.get()
         self.chain.put(self.json_tick_to_chain_tick(candidates[0]))
 
+        logger.debug("Tick selected, restarting cycle...")
         self.restart_cycle()

@@ -172,7 +172,7 @@ class Timeminer(object):
 
                 self.networker.stage = "ping"
 
-                logger.debug("Ping stage--------------------------------------")
+                logger.debug("Pinging the network...")
                 successful = \
                     self.generate_and_process_ping(
                         self.clockchain.prev_tick_ref())
@@ -205,10 +205,12 @@ class Timeminer(object):
             if self.clockchain.tick_pool_size() > 0 \
                     and not self.clockchain.lock:
                 self.networker.stage = 'select'
-                logger.debug("Select stage--------------------------------------")
+                logger.debug("Found valid next tick, entering select stage")
                 grace_period = 10
+                logger.debug("Sleeping for grace period of " + str(grace_period) + "s")
                 time.sleep(grace_period)
 
+                logger.debug("Grace period over, seeing what we've got in the pools...")
                 logger.debug("Number of ticks: " + str(self.clockchain.tick_pool_size()))
                 logger.debug("Number of forks: " + str(self.clockchain.fork_pool_size()))
 
