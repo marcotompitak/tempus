@@ -185,32 +185,19 @@ def validate_tick(tick, previous_tick=None, possible_previous_ticks=None,
     return True
 
 
-def validate_ping(ping, ping_pool=None, vote=False, pin_vote_on_ping=True):
-    stage = 'vote' if vote else 'ping'
+def validate_ping(ping):
     if not validate_schema(ping, 'ping_schema.json'):
-        logger.debug(stage + " failed schema validation")
+        logger.debug("ping failed schema validation")
         return False
-
-    if ping_pool is not None:
-        if vote and pin_vote_on_ping:
-            if pubkey_to_addr(ping['pubkey']) not in ping_pool:
-                logger.debug("Voters's pubkey not found in pingpool")
-                return False
-
-            # Voting twice just overwrites your past vote!
-        else:
-            if pubkey_to_addr(ping['pubkey']) in ping_pool:
-                logger.debug(stage + " was already in pool")
-                return False
 
     # Check hash and sig, keeping in mind signature might be popped off
     if not validate_sig_hash(ping):
-        logger.debug(stage + " failed sighash validation")
+        logger.debug("ping failed sighash validation")
         return False
 
     # TODO: Do sanity check on a pings timestamp in relation to current time etc
     if not validate_ping_timestamp(ping):  # <-- empty stub function atm..
-        logger.debug(stage + " failed sanity check on timestamp")
+        logger.debug("ping failed sanity check on timestamp")
         return False
 
     return True

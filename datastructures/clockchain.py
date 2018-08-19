@@ -11,7 +11,6 @@ class Clockchain(object):
         self.lock = False
         self.chain = Queue(maxsize=config['chain_max_length'])
         self.ping_pool = {}
-        self.vote_pool = {}
         self.fork_pool = {}
         # Priority queue because we want to sort by cumulative continuity
         self.tick_pool = PriorityQueue()
@@ -99,8 +98,7 @@ class Clockchain(object):
 
     def restart_cycle(self):
         # Ping_pool is not cleared here since we might have received pings
-        # at vote/select stage already, by faster peers
-        self.vote_pool = {}
+        # at select stage already, by faster peers
         self.tick_pool = PriorityQueue()
         self.fork_pool = {}
 
@@ -110,23 +108,6 @@ class Clockchain(object):
     def add_to_ping_pool(self, ping):
         addr_to_add = pubkey_to_addr(ping['pubkey'])
         self.ping_pool[addr_to_add] = ping
-
-    # Different to above: only store the vote reference and not entire structure
-    def add_to_vote_pool(self, vote):
-        addr_to_add = pubkey_to_addr(vote['pubkey'])
-        self.vote_pool[addr_to_add] = vote['reference']
-
-    # Returns a dict where keys are references of ticks and their nr of votes
-    def get_vote_counts(self):
-        count_dict = {}
-
-        for k, v in self.vote_pool.items():
-            if v in count_dict.keys():
-                count_dict[v] = count_dict[v] + 1
-            else:
-                count_dict[v] = 1
-
-        return count_dict
 
     def add_to_tick_pool(self, tick):
         tick_copy = copy.deepcopy(tick)
@@ -142,29 +123,6 @@ class Clockchain(object):
         # Putting minus sign on the continuity measurement since PriorityQueue
         # Returns the *lowest* valued item first, while we want *highest*
         self.tick_pool.put((-tick_continuity, tick_number, tick_copy))
-
-    # Return highest voted ticks (several if shared top score)
-    def top_tick_refs(self):
-        highest_voted_ticks = []
-
-        # Sort by value (amount of votes)
-        sorted_votes = sorted(self.get_vote_counts().items(),
-                              key=lambda x: x[1], reverse=True)
-
-        top_ref, top_score = sorted_votes.pop(0)
-        highest_voted_ticks.append(top_ref)
-
-        logger.debug("Highest amount of votes achieved was: " + str(top_score))
-
-        # If any other refs share the same score, we return those too
-        for vote in sorted_votes:
-            next_ref, next_score = vote
-            if next_score == top_score:
-                highest_voted_ticks.append(next_ref)
-            else:
-                break
-
-        return highest_voted_ticks
 
     def get_ticks_by_ref(self, references):
         # Get the actual tick from the tuple (_, _, tick) which is index 2
@@ -230,36 +188,5 @@ class Clockchain(object):
             # This removes earliest item from queue
             self.chain.get()
         self.chain.put(self.json_tick_to_chain_tick(candidates[0]))
-
-        self.restart_cycle()
-
-
-    def select_highest_voted_to_chain(self):
-        # ---- Add all ticks with same amount of votes to the dictionary ----
-        # WARNING: This MUST happen less than 50% of the time and result in
-        # usually only 1 winner, so that chain only branches occasionally
-        # and thus doesn't become an exponentially growing tree.
-        # This is the main condition to achieve network-wide consensus
-
-        highest_ticks = list(self.tick_pool.queue)
-
-        # TODO: Should always be > 0 but sometimes not, when unsynced...
-        if len(highest_ticks) > 0:
-            logger.debug("Top tick refs with " + str(len(highest_ticks[0]['list']))
-                         + " pings each")
-
-            tick_dict = {}
-            for tick in highest_ticks:
-                to_add = self.json_tick_to_chain_tick(tick)
-                tick_dict = {**tick_dict, **to_add}
-
-            # TODO: Is this atomic? 
-            if self.chain.full():
-                # This removes earliest item from queue
-                self.chain.get()
-
-            self.chain.put(tick_dict)
-        else:
-            logger.info("Warning!! No ticks added to chain!!")
 
         self.restart_cycle()

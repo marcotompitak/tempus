@@ -95,7 +95,7 @@ class Timeminer(object):
         self.clockchain.lock = False
         return synced
 
-    def generate_and_process_ping(self, reference, vote=False):
+    def generate_and_process_ping(self, reference):
         # TODO: Code duplication between here and api.. where to put??
         # TODO: Can't be in helpers, and cant be in clockchain/networker..
         # Always construct ping in the following order:
@@ -106,8 +106,6 @@ class Timeminer(object):
                 'timestamp': utcnow(),
                 'reference': reference}
 
-        stage = 'vote' if vote else 'ping'
-
         _, nonce = mine(ping)
         ping['nonce'] = nonce
 
@@ -115,23 +113,18 @@ class Timeminer(object):
         ping['signature'] = signature
 
         # Validate own ping
-        if not validate_ping(ping, self.clockchain.ping_pool, vote):
-            logger.debug("Failed own " + stage + " validation")
+        if not validate_ping(ping):
+            logger.debug("Failed own ping validation")
             return False
 
-        if vote:
-            self.clockchain.add_to_vote_pool(ping)
-        else:
-            self.clockchain.add_to_ping_pool(ping)
-
-        route = 'vote' if vote else 'ping'
+        self.clockchain.add_to_ping_pool(ping)
 
         # Forward to peers (this must be after all validation)
-        self.networker.forward(data_dict=ping, route=route,
+        self.networker.forward(data_dict=ping, route='ping',
                                origin=credentials.addr,
                                redistribute=0)
 
-        logger.debug("Forwarded own " + route + ": " + str(ping))
+        logger.debug("Forwarded own ping: " + str(ping))
 
         return True
 

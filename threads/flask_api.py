@@ -26,36 +26,29 @@ class API(object):
             self.duplicate_cache[hasher(values)] = True
             return False
 
-    def handle_ping(self, ping, vote=False):
+    def handle_ping(self, ping):
         if self.check_duplicate(ping):
             return "duplicate request please wait 10s", 400
 
-        route = 'vote' if vote else 'ping'
+        if not validate_ping(ping):
+            return "Invalid ping", 400
 
-        if not validate_ping(ping, self.clockchain.ping_pool, vote, not (vote and not self.clockchain.synced)):
-            return "Invalid " + route, 400
-
-        if vote:
-            self.clockchain.add_to_vote_pool(ping)
-        else:
-            self.clockchain.add_to_ping_pool(ping)
+        self.clockchain.add_to_ping_pool(ping)
 
         # TODO: Why would anyone forward others pings? Only incentivized
         # TODO: to forward own pings (to get highest uptime)
         # TODO: Solved if you remove peers that do not forward your ping
         # TODO: For example by adding "shadow-peers" and checking they have it
 
-        route = 'vote' if vote else 'ping'
-
         redistribute = int(request.args.get('redistribute'))
         if redistribute:
             origin = request.args.get('addr')
             self.networker.forward(data_dict=ping,
-                                   route=route,
+                                   route='ping',
                                    origin=origin,
                                    redistribute=redistribute)
 
-        return "Added " + route, 201
+        return "Added ping", 201
 
     def create_app(self):
         app = Flask(__name__)
@@ -97,11 +90,7 @@ class API(object):
 
         @app.route('/forward/ping', methods=['POST'])
         def forward_ping():
-            return self.handle_ping(request.get_json(), vote=False)
-
-        @app.route('/forward/vote', methods=['POST'])
-        def forward_vote():
-            return self.handle_ping(request.get_json(), vote=True)
+            return self.handle_ping(request.get_json())
 
         # TODO: In the future, create a dns seed with something similar to
         # https://github.com/sipa/bitcoin-seeder
@@ -190,10 +179,6 @@ class API(object):
         @app.route('/info/ping_pool', methods=['GET'])
         def info_ping_pool():
             return jsonify(remap(self.clockchain.ping_pool)), 200
-
-        @app.route('/info/vote_counts', methods=['GET'])
-        def info_vote_counts():
-            return jsonify(remap(self.clockchain.get_vote_counts())), 200
 
         # This is done to unify logging visually.
         # Otherwise ugly Werkzeug logging is used (which is disabled in commons)
