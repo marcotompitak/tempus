@@ -80,6 +80,7 @@ class API(object):
                 if not validate_tick_for_resync(tick, self.clockchain.latest_selected_tick(),
                                                 self.clockchain.possible_previous_ticks()):
                     origin = request.args.get('addr')
+                    # TODO: this could be abused to trigger resyncs by spamming invalid ticks
                     self.clockchain.fork_pool.update({origin: tick})
                 return "Invalid tick", 400
 

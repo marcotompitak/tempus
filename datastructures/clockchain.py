@@ -208,6 +208,7 @@ class Clockchain(object):
         return len(tick['list'])
 
     def hash_diff(self, tick):
+        # TODO: standardize the hashing of objects, so it doesn't require a dict
         pkhash = hasher({'0': tick['pubkey']})
         pthash = hasher({'0': tick['prev_tick']})
         diff = abs(int(pkhash + pthash, 16) - int(pthash, 16))

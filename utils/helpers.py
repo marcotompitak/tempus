@@ -31,6 +31,8 @@ def standard_encode(dictionary):
         'utf-8')
 
 
+# TODO: standardize the hashing of objects, so it doesn't require a dict
+# TODO: see for instance clockchain.hash_diff function for a non-dict use case
 def hasher(dictionary):
     return hashlib.sha256(standard_encode(dictionary)).hexdigest()
 
