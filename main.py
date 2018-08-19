@@ -35,7 +35,7 @@ def build_app(g_port):
 
 if __name__ == '__main__':
     networker = Networker()
-    clockchain = Clockchain(networker)
+    clockchain = Clockchain()
 
     timeminer = Timeminer(clockchain, networker)
 

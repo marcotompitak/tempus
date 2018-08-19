@@ -1,15 +1,13 @@
 from utils.helpers import hasher, measure_tick_continuity
 from utils.common import logger, credentials, config
 from utils.pki import pubkey_to_addr
-from utils.validation import validate_clockchain
 from queue import Queue, PriorityQueue
 import copy
 import time
-import requests
 
 
 class Clockchain(object):
-    def __init__(self, networker):
+    def __init__(self):
         self.lock = False
         self.chain = Queue(maxsize=config['chain_max_length'])
         self.ping_pool = {}
@@ -17,11 +15,6 @@ class Clockchain(object):
         self.fork_pool = {}
         # Priority queue because we want to sort by cumulative continuity
         self.tick_pool = PriorityQueue()
-
-        # TODO Move to timeminer
-        self.synced = True
-
-        self.networker = networker
 
         logger.debug("This node is " + credentials.addr)
 
@@ -43,80 +36,6 @@ class Clockchain(object):
 
     def fork_pool_size(self):
         return len(self.fork_pool)
-
-    def copy_chain(self, peer_addr):
-        logger.debug("Requesting chain from peer " + str(peer_addr))
-        peer_url = self.networker.reverse_peers.get(peer_addr, None)
-
-        if not peer_url:
-            logger.debug("Peer unknown, aborting chain request")
-            return False
-
-        logger.debug("Requesting chain from netloc " + str(peer_url))
-        r = requests.get(str(peer_url) + "/info/clockchain")
-
-        try:
-            alt_chain = r.json()['chain']
-        except KeyError:
-            logger.debug("Received invalid response from " + peer_addr + "; could not copy chain")
-            return False
-
-        alt_chain_is_valid = validate_clockchain(alt_chain)
-
-        if alt_chain_is_valid:
-            logger.debug("Received valid chain with " + str(len(alt_chain)) + " ticks")
-            logger.debug("Clearing current chain")
-            with self.chain.mutex:
-                self.chain.queue.clear()
-            logger.debug("Copying over new chain")
-            for tick in alt_chain:
-                logger.debug("Copying tick " + str(list(tick.keys())[0]))
-                self.chain.put(tick)
-            logger.debug("Chain copied")
-
-        logger.debug("Returning " + str(alt_chain_is_valid))
-        return alt_chain_is_valid
-
-    #TODO Move this to timeminer, doesn't need to be a clockchain method
-    def resync(self):
-        self.lock = True
-        alt_prev_ticks = list(set(tick['prev_tick'] for tick in self.fork_pool.values()))
-        logger.debug("Resyncing, alternative references found to ticks:")
-        for ref in alt_prev_ticks:
-            logger.debug(str(ref))
-
-        if len(alt_prev_ticks) > 1:
-            logger.debug("More than one alternative reference found, calculating majority")
-            ref_counts = [(prev_tick, alt_prev_ticks.count(prev_tick)) for prev_tick in alt_prev_ticks]
-            majority_prev_tick = sorted(ref_counts, key=lambda tup: tup[1], reverse=True)[0][0]
-            logger.debug("Majority reference: " + str(majority_prev_tick))
-        elif len(alt_prev_ticks) == 1:
-            majority_prev_tick = alt_prev_ticks[0]
-            logger.debug("One alternative reference found: " + str(majority_prev_tick))
-        else:
-            logger.debug("Asked to resync but there are no known alternative chains, aborting")
-            return None
-
-        majority_peers = [k for k, v in self.fork_pool.items() if v['prev_tick'] == majority_prev_tick]
-        logger.debug("Majority alternative reference represented by the following peers:")
-        for peer in majority_peers:
-            logger.debug(str(peer))
-
-        logger.debug("Attempting to sync chain with majority peers")
-        synced = False
-        time.sleep(5) # Give other nodes a chance to finish their select stage before requesting their chain
-        while not synced and len(majority_peers) > 0:
-            next_peer = majority_peers.pop()
-            logger.debug("Syncing with peer " + str(next_peer))
-            synced = self.copy_chain(next_peer)
-
-        if not synced:
-            logger.debug("Attempted to resync but failed to obtain chain from any majority peer")
-        else:
-            self.tick_pool.queue.clear()
-            self.fork_pool = {}
-        self.lock = False
-        return synced
 
     # Returns most recent tick reference: highest continuity tick from tickpool
     # Used for voting

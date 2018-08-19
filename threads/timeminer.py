@@ -5,6 +5,8 @@ from utils.pki import sign
 import time
 import random
 import threading
+from utils.validation import validate_clockchain
+import requests
 
 
 class Timeminer(object):
@@ -19,6 +21,79 @@ class Timeminer(object):
         self.ping_thread.start()
         self.tick_thread.start()
         self.select_thread.start()
+
+    def copy_chain(self, peer_addr):
+        logger.debug("Requesting chain from peer " + str(peer_addr))
+        peer_url = self.networker.reverse_peers.get(peer_addr, None)
+
+        if not peer_url:
+            logger.debug("Peer unknown, aborting chain request")
+            return False
+
+        logger.debug("Requesting chain from netloc " + str(peer_url))
+        r = requests.get(str(peer_url) + "/info/clockchain")
+
+        try:
+            alt_chain = r.json()['chain']
+        except KeyError:
+            logger.debug("Received invalid response from " + peer_addr + "; could not copy chain")
+            return False
+
+        alt_chain_is_valid = validate_clockchain(alt_chain)
+
+        if alt_chain_is_valid:
+            logger.debug("Received valid chain with " + str(len(alt_chain)) + " ticks")
+            logger.debug("Clearing current chain")
+            with self.clockchain.chain.mutex:
+                self.clockchain.chain.queue.clear()
+            logger.debug("Copying over new chain")
+            for tick in alt_chain:
+                logger.debug("Copying tick " + str(list(tick.keys())[0]))
+                self.clockchain.chain.put(tick)
+            logger.debug("Chain copied")
+
+        logger.debug("Returning " + str(alt_chain_is_valid))
+        return alt_chain_is_valid
+
+    def resync(self):
+        self.clockchain.lock = True
+        alt_prev_ticks = list(set(tick['prev_tick'] for tick in self.clockchain.fork_pool.values()))
+        logger.debug("Resyncing, alternative references found to ticks:")
+        for ref in alt_prev_ticks:
+            logger.debug(str(ref))
+
+        if len(alt_prev_ticks) > 1:
+            logger.debug("More than one alternative reference found, calculating majority")
+            ref_counts = [(prev_tick, alt_prev_ticks.count(prev_tick)) for prev_tick in alt_prev_ticks]
+            majority_prev_tick = sorted(ref_counts, key=lambda tup: tup[1], reverse=True)[0][0]
+            logger.debug("Majority reference: " + str(majority_prev_tick))
+        elif len(alt_prev_ticks) == 1:
+            majority_prev_tick = alt_prev_ticks[0]
+            logger.debug("One alternative reference found: " + str(majority_prev_tick))
+        else:
+            logger.debug("Asked to resync but there are no known alternative chains, aborting")
+            return None
+
+        majority_peers = [k for k, v in self.clockchain.fork_pool.items() if v['prev_tick'] == majority_prev_tick]
+        logger.debug("Majority alternative reference represented by the following peers:")
+        for peer in majority_peers:
+            logger.debug(str(peer))
+
+        logger.debug("Attempting to sync chain with majority peers")
+        synced = False
+        time.sleep(5) # Give other nodes a chance to finish their select stage before requesting their chain
+        while not synced and len(majority_peers) > 0:
+            next_peer = majority_peers.pop()
+            logger.debug("Syncing with peer " + str(next_peer))
+            synced = self.copy_chain(next_peer)
+
+        if not synced:
+            logger.debug("Attempted to resync but failed to obtain chain from any majority peer")
+        else:
+            self.clockchain.tick_pool.queue.clear()
+            self.clockchain.fork_pool = {}
+        self.clockchain.lock = False
+        return synced
 
     def generate_and_process_ping(self, reference, vote=False):
         # TODO: Code duplication between here and api.. where to put??
@@ -147,8 +222,7 @@ class Timeminer(object):
 
                 if self.clockchain.fork_pool_size() > self.clockchain.tick_pool_size():
                     logger.debug("Detected we're on minority fork, syncing")
-                    self.clockchain.synced = False
-                    synced = self.clockchain.resync()
+                    synced = self.resync()
                     if not synced:
                         logger.debug("Sync failed, fingers crossed for next round")
 
