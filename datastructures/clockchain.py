@@ -10,6 +10,7 @@ import requests
 
 class Clockchain(object):
     def __init__(self, networker):
+        self.lock = False
         self.chain = Queue(maxsize=config['chain_max_length'])
         self.ping_pool = {}
         self.vote_pool = {}
@@ -78,6 +79,7 @@ class Clockchain(object):
 
     #TODO Move this to timeminer, doesn't need to be a clockchain method
     def resync(self):
+        self.lock = True
         alt_prev_ticks = list(set(tick['prev_tick'] for tick in self.fork_pool.values()))
         logger.debug("Resyncing, alternative references found to ticks:")
         for ref in alt_prev_ticks:
@@ -102,6 +104,7 @@ class Clockchain(object):
 
         logger.debug("Attempting to sync chain with majority peers")
         synced = False
+        time.sleep(5) # Give other nodes a chance to finish their select stage before requesting their chain
         while not synced and len(majority_peers) > 0:
             next_peer = majority_peers.pop()
             logger.debug("Syncing with peer " + str(next_peer))
@@ -111,9 +114,8 @@ class Clockchain(object):
             logger.debug("Attempted to resync but failed to obtain chain from any majority peer")
         else:
             self.tick_pool.queue.clear()
-            for peer, tick in self.fork_pool.items():
-                if tick['prev_tick'] == majority_prev_tick:
-                    self.add_to_tick_pool(tick)
+            self.fork_pool = {}
+        self.lock = False
         return synced
 
     # Returns most recent tick reference: highest continuity tick from tickpool
@@ -293,6 +295,9 @@ class Clockchain(object):
         return diff
 
     def select(self):
+        if self.tick_pool_size() == 0:
+            return
+
         candidates = [x[2] for x in list(self.tick_pool.queue)]
 
         if len(candidates) > 1:

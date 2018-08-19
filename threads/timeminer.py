@@ -91,6 +91,8 @@ class Timeminer(object):
                                    origin=credentials.addr,
                                    redistribute=0)
             logger.debug("Forwarded own tick: " + str(tick))
+            self.clockchain.ping_pool = {}
+            self.added_ping = False
             return True
 
         logger.debug("Failed own tick validation, not forwarded")
@@ -98,7 +100,8 @@ class Timeminer(object):
 
     def ping_worker(self):
         while True:
-            if self.networker.ready and not self.added_ping and not self.networker.stage == 'select':
+            if self.networker.ready and not self.added_ping and not self.networker.stage == 'select' \
+                    and not self.clockchain.lock:
 
                 self.networker.stage = "ping"
 
@@ -117,21 +120,23 @@ class Timeminer(object):
     def tick_worker(self):
         while True:
             time.sleep(5)
-            if self.networker.ready and not self.networker.stage == 'select':
+            if self.networker.ready \
+                    and not self.clockchain.lock:
 
                 if len(list(self.clockchain.ping_pool.values())) == 0:
                     logger.info("(tick_worker) No pings, waiting")
                     continue
 
                 logger.info("(tick_worker) Pingpool not empty, building tick")
-                logger.debug("Tick stage--------------------------------------")
 
                 self.generate_and_process_tick()
+                self.networker.stage = 'select'
 
     def select_worker(self):
         while True:
             time.sleep(5)
-            if self.clockchain.tick_pool_size() > 0:
+            if self.clockchain.tick_pool_size() > 0 \
+                    and not self.clockchain.lock:
                 self.networker.stage = 'select'
                 logger.debug("Select stage--------------------------------------")
                 grace_period = 10

@@ -86,6 +86,31 @@ def validate_sig_hash(item):
     return True
 
 
+def tick_continuity(tick, prev_tick):
+    # TODO validate with schema
+    if tick is None:
+        return 0
+    previous_addresses = set([ping['pubkey'] for ping in prev_tick['list']])
+    current_addresses = set([ping['pubkey'] for ping in tick['list']])
+    common_addresses = previous_addresses.intersection(current_addresses)
+    if len(previous_addresses) > 0:
+        return len(common_addresses) / len(previous_addresses)
+    else:
+        return 1
+
+
+def validate_tick_continuity(tick, prev_tick):
+    if tick is None:
+        return False
+    if prev_tick['height'] == 0:
+        return True
+    logger.debug("(validate_tick_continuity) tick continuity: " +
+                 str(tick_continuity(tick, prev_tick)))
+    if tick_continuity(tick, prev_tick) > 0.5:
+        return True
+    return False
+
+
 def validate_tick_for_resync(tick, previous_tick=None, possible_previous_ticks=None,
                   verbose=True):
     # Doing validation on a copy so that the original keeps its "this_tick" ref
@@ -96,6 +121,10 @@ def validate_tick_for_resync(tick, previous_tick=None, possible_previous_ticks=N
     # This is used to keep track of the hash of the tick as debug information
     # Popping it off as it is not supposed to be an actual part of a tick
     tick_copy.pop('this_tick', None)
+
+    if previous_tick is not None:
+        if not validate_tick_continuity(tick_copy, previous_tick):
+            return False
 
     # Check hash and sig keeping in mind signature might be popped off
     if not validate_sig_hash(tick_copy):
